@@ -1,114 +1,72 @@
-# NLLB-200 CTranslate2 Translator
+# LangGraph Ollama Memory Chat
 
-Offline machine translation using Meta's [NLLB-200](https://huggingface.co/facebook/nllb-200-distilled-600M) model, accelerated by [CTranslate2](https://github.com/OpenNMT/CTranslate2).
+A context-aware chatbot implementation using **LangGraph**, **Ollama**, and **ChromaDB**. This project demonstrates how to build a stateful agent that remembers past conversations semantically and persists session state locally.
 
-Supports **200 languages** out of the box.
+## Features
 
----
+*   **Stateful Conversation**: Uses `LangGraph` to manage the chat workflow and state transitions.
+*   **Local LLM**: Powered by **Ollama** (defaulting to `llama3.2:1b`) for privacy and local execution without API keys.
+*   **Semantic Memory (RAG on Chat History)**: Stores user and assistant messages in a **ChromaDB** vector database using `SentenceTransformer` embeddings.
+*   **Context Retrieval**: Automatically retrieves relevant past memories based on the current user query to provide context-aware responses (e.g., asking "What did I say about SQL?" will fetch the specific previous turn).
+*   **Session Persistence**: Uses **SQLite** to checkpoint the conversation state, allowing the graph to maintain short-term state across steps.
 
 ## Prerequisites
 
-- Python 3.9+
-- A conda or virtual environment (recommended)
+1.  **Python 3.10+**
+2.  **Ollama**: Installed and running on your machine.
+    *   You must pull the model used in the script:
+        ```bash
+        ollama pull llama3.2:1b
+        ```
 
-Install dependencies:
+## Installation
 
-```bash
-pip install ctranslate2 transformers sentencepiece
-```
+1.  Clone the repository or download the source code.
 
-> **GPU users:** also install CUDA-compatible PyTorch (`pip install torch` with CUDA support).
+2.  Create a virtual environment (recommended):
+    ```bash
+    python -m venv venv
+    # Windows
+    venv\Scripts\activate
+    # Linux/Mac
+    source venv/bin/activate
+    ```
 
----
+3.  Install the required Python packages:
+    ```bash
+    pip install langgraph langchain-core ollama chromadb sentence-transformers
+    ```
 
-## Quick Start
+## Usage
 
-### Step 1 — Convert the model
+1.  Ensure the Ollama server is running:
+    ```bash
+    ollama serve
+    ```
 
-```bash
-python setup_model.py
-```
+2.  Run the chat script:
+    ```bash
+    python test.py
+    ```
 
-This will:
-1. Download the NLLB-200-distilled-600M weights from HuggingFace.
-2. Convert them to CTranslate2 format (default: `int8` quantization).
-3. Save the tokenizer locally for offline use.
+3.  **Interact**: Type your messages in the terminal.
+    *   Type `exit` to quit the application.
 
-Output is written to `nllb-200-ct2/`.
+## Architecture
 
-### Step 2 — Translate
+The application follows a directed graph workflow defined in `test.py`:
 
-```bash
-python translate.py
-```
+1.  **Input Node**: Captures user text.
+2.  **Save User Memory**: Embeds and stores the user's message in ChromaDB.
+3.  **Retrieve Memory**: Searches ChromaDB for past messages semantically similar to the current input.
+4.  **Build Prompt**: Injects retrieved memories into the system prompt as context.
+5.  **Ollama Node**: Calls the local LLM to generate a response.
+6.  **Save AI Memory**: Embeds and stores the AI's response for future retrieval.
+7.  **Output Node**: Displays the response to the user.
 
-This will:
-1. Load the converted model and tokenizer from disk.
-2. Translate the configured text and print the result.
+## Future Improvements & Use Cases
 
-Edit the configuration section at the top of `translate.py` to change the source text, source/target languages, or device.
-
----
-
-## Configuration
-
-### Quantization (in `setup_model.py`)
-
-| Option          | Best for | Speed  | Size    | Quality   |
-|-----------------|----------|--------|---------|-----------|
-| `int8`          | CPU      | Fast   | Smallest | Very good |
-| `float16`       | GPU      | Fast   | Small    | Excellent |
-| `int8_float16`  | GPU      | Fast   | Smallest | Very good |
-| `float32`       | Any      | Slow   | Largest  | Best      |
-
-### Language codes (in `translate.py`)
-
-| Code        | Language              |
-|-------------|-----------------------|
-| `eng_Latn`  | English               |
-| `fra_Latn`  | French                |
-| `spa_Latn`  | Spanish               |
-| `deu_Latn`  | German                |
-| `zho_Hans`  | Chinese (Simplified)  |
-| `arb_Arab`  | Arabic                |
-| `hin_Deva`  | Hindi                 |
-| `jpn_Jpan`  | Japanese              |
-| `rus_Cyrl`  | Russian               |
-| `por_Latn`  | Portuguese            |
-| `urd_Arab`  | Urdu                  |
-| `ben_Beng`  | Bengali               |
-
-Full list of 200 language codes: [FLORES-200 README](https://github.com/facebookresearch/flores/blob/main/flores200/README.md)
-
----
-
-## Project Structure
-
-```
-ctranslate/
-├── setup_model.py      # Step 1: Download, convert, and save the model
-├── translate.py         # Step 2: Load the model and translate text
-├── README.md            # This file
-└── nllb-200-ct2/        # Generated after setup (not committed)
-    ├── model.bin
-    ├── vocabulary.json
-    └── tokenizer/
-```
-
----
-
-## Troubleshooting
-
-| Problem | Solution |
-|---------|----------|
-| `float16` warning on CPU | Use `int8` quantization instead — float16 has no CPU benefit |
-| `TokenizersBackend` error | Run `setup_model.py` and `translate.py` in the **same** conda environment |
-| Slow first run | Initial download is ~1.2 GB; subsequent runs load from disk |
-| Out of memory | Use `int8` quantization for the smallest memory footprint |
-
----
-
-## License
-
-The NLLB-200 model is released by Meta under [CC-BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
-CTranslate2 is licensed under [MIT](https://github.com/OpenNMT/CTranslate2/blob/master/LICENSE).
+*   **Long-term Personal Assistant**: Can be expanded to remember user preferences, tasks, and details over long periods (days/weeks).
+*   **Document Q&A**: The vector store logic can be adapted to ingest external documents (PDFs, text files) to allow the bot to answer questions based on specific knowledge bases.
+*   **Multi-Agent Systems**: LangGraph allows adding more specialized nodes (e.g., a web search tool or a Python code executor) to create a more capable agent.
+*   **API Deployment**: The graph can be wrapped in a FastAPI service to act as a backend for a web or mobile interface.
